@@ -1,0 +1,33 @@
+# === Core ===
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+
+# === Veri Kaynakları ===
+yfinance==0.2.40          # ABD + BIST borsa verileri
+ccxt==4.4.0               # Kripto borsalar (Binance, Coinbase vb.)
+websocket-client==1.8.0   # WebSocket bağlantıları
+httpx==0.27.0             # HTTP istemcisi
+
+# === Depolama (hafif - Docker gerektirmez) ===
+sqlalchemy==2.0.35        # Veritabanı ORM
+aiosqlite==0.20.0         # Async SQLite (varsayılan)
+# asyncpg==0.29.0         # PostgreSQL (isteğe bağlı)
+redis[hiredis]==5.1.0     # Redis (isteğe bağlı)
+
+# === Analiz ===
+pandas==2.2.0
+numpy==1.26.4
+ta==0.11.0                # Teknik göstergeler
+
+# === Bildirimler ===
+python-telegram-bot==21.0  # Telegram
+
+# === Dashboard ===
+jinja2==3.1.4
+
+# === Araçlar ===
+python-dotenv==1.0.1
+loguru==0.7.2
+orjson==3.10.0
