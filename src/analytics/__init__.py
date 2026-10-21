@@ -16,4 +16,17 @@ engine      : high level orchestration
 api         : FastAPI analysis server
 """
 
-__version__ = "1.0.0"
+from .engine import AnalysisResult, analyze, analysis_summary
+from .market_data import fetch_ohlcv
+from .report import render_report
+
+__version__ = "1.1.0"
+
+__all__ = [
+    "AnalysisResult",
+    "analysis_summary",
+    "analyze",
+    "fetch_ohlcv",
+    "render_report",
+    "__version__",
+]

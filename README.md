@@ -1,6 +1,10 @@
 # 🐋 WhaleTracker
 
+**Public repo:** https://github.com/rrxprotex/whale-tracker
+
 Real-time whale trade detection system that monitors **US stocks**, **Turkey (BIST)**, and **Crypto** markets for large/block trades and volume spikes.
+
+It also includes an independent **advanced analytics engine** that produces Turkish, offline HTML research reports with technical, spectral, statistical, pattern, regime and probabilistic forecast sections. The analytics output is **not investment advice**; every projection is a scenario with explicit uncertainty.
 
 ## Features
 
@@ -87,6 +91,95 @@ python main.py --log-level DEBUG
 
 Navigate to: **http://localhost:8000**
 
+## Advanced Analytics Engine
+
+`src/analytics/` is independent from the whale-detection orchestrator. It only needs `numpy`, `pandas`, `httpx` and (for the web UI) `fastapi`. No API key is required. Charts are generated as **inline SVG**, so a report works offline without Plotly or a CDN.
+
+### CLI
+
+```bash
+# Crypto (Binance public REST, Bybit fallback)
+python analyze.py BTCUSDT
+
+# US stock (Yahoo Finance chart API)
+python analyze.py AAPL --market us
+
+# BIST stock
+python analyze.py THYAO --market bist --limit 500
+
+# Multiple symbols, custom horizon, no files written
+python analyze.py BTCUSDT ETHUSDT SOLUSDT --interval 4h --horizon 42 --no-save
+
+# Open the generated HTML report in the browser
+python analyze.py BTCUSDT --open
+```
+
+Reports and JSON snapshots are written to `reports/` (ignored by git). The command prints a compact terminal summary and writes a standalone HTML file plus the full JSON data.
+
+### Web UI and API
+
+```bash
+uvicorn src.analytics.api:app --reload --port 8010
+```
+
+Open **http://localhost:8010** for the Turkish analysis UI, or use the JSON/HTML endpoints:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Service and supported-interval status |
+| GET | `/api/catalog` | Curated crypto/US/BIST symbol catalog |
+| GET | `/api/symbols?q=btc` | Symbol search |
+| GET | `/api/summary/{symbol}` | Compact JSON summary |
+| GET | `/api/analyze/{symbol}` | Full report JSON + SVG charts |
+| GET | `/api/report/{symbol}` | Standalone HTML report |
+| POST | `/api/analyze` | JSON body variant |
+
+Common query parameters: `market=auto|crypto|us|bist`, `interval=1h|4h|1d|1w`, `limit=80..5000`, `horizon=1..365`, `use_cache=true|false`, `save=true|false`.
+
+Examples:
+
+```bash
+curl "http://localhost:8010/api/summary/BTCUSDT?interval=1d&horizon=30"
+curl "http://localhost:8010/api/report/AAPL?market=us" -o AAPL.html
+```
+
+### Methods
+
+| Layer | What is computed |
+|-------|------------------|
+| Technical | EMA/SMA, RSI, MACD, ADX/DI, ATR, Bollinger, stochastic, OBV, volume profile inputs; explainable weighted technical score |
+| Spectral | Welch PSD, dominant cycles, harmonic regression, Hilbert phase, Haar wavelet energy, SSA components and SSA projection |
+| Statistical | Hurst (R/S and DFA), ADF, variance ratio, permutation entropy, Sharpe/Sortino/Calmar, VaR/CVaR, drawdown, tail ratio, Amihud and Roll spread |
+| Patterns | Pivot-based support/resistance clusters, Fibonacci retracements, volume profile (POC/value area/HVN), candlestick patterns, RSI divergence, channel and double top/bottom checks |
+| Regime | Trend and volatility regimes, market phase, Welch change points, monthly and weekday seasonality |
+| Forecast | 8-model ensemble: drift, linear trend, Holt, AR, Ornstein–Uhlenbeck, harmonic, SSA and k-NN analog; walk-forward weighting; block-bootstrap Monte Carlo; calibrated 80%/95% bands |
+| Scoring | Regime-aware composite score with component weights and contributions, confidence decomposition and Turkish narrative |
+
+Forecast bands are **empirical scenario ranges**, not guarantees. The engine reports walk-forward error, direction hit rate, model weights and data-quality warnings so the user can judge how much to trust a projection.
+
+### Data sources and cache
+
+- Crypto: Binance public REST (primary), Bybit public REST (fallback), Yahoo Finance (fallback).
+- US/BIST: Yahoo Finance chart API.
+- Responses are cached under `data/cache/` with a TTL; stale cache is used only as a fallback when a provider is unavailable and is flagged in the report.
+- No private keys, exchange accounts or paid data subscriptions are required.
+
+### Tests
+
+```bash
+python -m pytest tests/ -q
+```
+
+The tests use synthetic OHLCV data and do not require network access.
+
+### Limitations
+
+- The engine analyzes price/volume history only; it does not know news, order-book depth, funding, macro events or company fundamentals.
+- Fourier/SSA/harmonic methods assume recurring structure that may disappear; regime changes invalidate historical cycles.
+- Walk-forward validation reduces, but does not eliminate, overfitting and look-ahead risk.
+- Thinly traded BIST names and stale Yahoo bars can produce unreliable volume/pattern statistics; check the data-quality warning in the report.
+- **This project is for research and education. It is not investment advice, a recommendation, or a guarantee of future prices.**
+
 ## Docker Deployment
 
 ```bash
@@ -97,7 +190,7 @@ docker-compose up -d
 docker-compose logs -f whale-tracker
 ```
 
-## API Endpoints
+## Whale Monitoring API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -157,8 +250,10 @@ For enhanced data:
 
 ```
 whale-tracker/
-├── main.py                      # Entry point
+├── main.py                      # Whale-tracker entry point
+├── analyze.py                   # Advanced analytics CLI
 ├── requirements.txt
+├── LICENSE
 ├── docker-compose.yml
 ├── Dockerfile
 ├── .env.example
@@ -169,6 +264,20 @@ whale-tracker/
 │   ├── __init__.py
 │   ├── models.py                # Database models + Pydantic schemas
 │   ├── orchestrator.py          # Main coordination engine
+│   ├── analytics/               # Independent multi-method analysis package
+│   │   ├── market_data.py       # Binance/Bybit/Yahoo + disk cache
+│   │   ├── symbols.py           # Crypto/US/BIST catalog and resolution
+│   │   ├── indicators.py        # Technical indicators + snapshot
+│   │   ├── spectral.py          # Welch, harmonic, Hilbert, Haar, SSA
+│   │   ├── statistics.py        # Hurst, ADF, variance ratio, risk
+│   │   ├── patterns.py          # Levels, Fibonacci, profile, candles
+│   │   ├── regime.py            # Regimes, change points, seasonality
+│   │   ├── forecast.py          # 8-model ensemble + Monte Carlo
+│   │   ├── scoring.py           # Composite score + Turkish narrative
+│   │   ├── charts.py            # Dependency-free inline SVG charts
+│   │   ├── report.py            # Standalone Turkish HTML report
+│   │   ├── engine.py            # Pipeline orchestration
+│   │   └── api.py               # FastAPI analytics UI/endpoints
 │   ├── data_sources/
 │   │   ├── base.py              # Abstract data source
 │   │   ├── us_market.py         # US stocks (yfinance)
@@ -185,7 +294,11 @@ whale-tracker/
 │   │   └── webhook_alert.py     # Webhook integrations
 │   └── dashboard/
 │       └── app.py               # FastAPI + HTML dashboard
-└── logs/                        # Log files
+├── tests/
+│   └── test_analytics.py        # Offline synthetic-data tests
+├── data/cache/                  # Runtime market-data cache (gitignored)
+├── reports/                     # Generated HTML/JSON reports (gitignored)
+└── logs/                        # Log files (gitignored)
 ```
 
 ## License

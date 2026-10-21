@@ -1,5 +1,6 @@
 # === Core ===
 fastapi==0.115.0
+starlette==0.41.3        # FastAPI 0.115 ile uyumlu sürüm
 uvicorn[standard]==0.30.0
 pydantic==2.9.0
 pydantic-settings==2.5.0
@@ -31,3 +32,7 @@ jinja2==3.1.4
 python-dotenv==1.0.1
 loguru==0.7.2
 orjson==3.10.0
+rich==13.7.1             # analiz CLI tabloları (opsiyonel)
+
+# Not: src/analytics yalnızca numpy, pandas, httpx ve fastapi kullanır.
+# Grafikler harici CDN/Plotly olmadan gömülü SVG olarak üretilir.
