@@ -1,6 +1,7 @@
 """Redis cache manager for real-time data and rate limiting."""
 
 import json
+import time
 from typing import Optional, Any
 from loguru import logger
 
@@ -56,9 +57,30 @@ class CacheManager:
             if self._available:
                 await self._redis.setex(key, ttl, serialized)
             else:
-                self._memory_cache[key] = serialized
+                # Redis fallback must preserve the same expiry semantics.
+                # Without this, prices and alert-dedup keys live forever in
+                # the in-memory cache when Redis is unavailable.
+                expires_at = time.monotonic() + max(float(ttl), 0.0)
+                self._memory_cache[key] = (expires_at, serialized)
         except Exception as e:
             logger.error(f"[Cache] Set error: {e}")
+
+    def _get_memory_value(self, key: str) -> Optional[str]:
+        """Return a live memory-cache value and remove expired entries."""
+        entry = self._memory_cache.get(key)
+        if entry is None:
+            return None
+
+        # Accept the old string form so a long-lived process can survive a
+        # hot reload or an upgrade without crashing while the cache resets.
+        if not isinstance(entry, tuple):
+            return entry
+
+        expires_at, serialized = entry
+        if time.monotonic() >= expires_at:
+            self._memory_cache.pop(key, None)
+            return None
+        return serialized
 
     async def get(self, key: str) -> Optional[Any]:
         """Get a cached value."""
@@ -66,7 +88,7 @@ class CacheManager:
             if self._available:
                 value = await self._redis.get(key)
             else:
-                value = self._memory_cache.get(key)
+                value = self._get_memory_value(key)
 
             if value:
                 try:
@@ -115,11 +137,14 @@ class CacheManager:
         if not self._available:
             # Filter memory cache
             prefix = f"price:{market}:" if market else "price:"
-            return {
-                k: json.loads(v)
-                for k, v in self._memory_cache.items()
-                if k.startswith(prefix)
-            }
+            prices = {}
+            for key in list(self._memory_cache):
+                if not key.startswith(prefix):
+                    continue
+                value = await self.get(key)
+                if value is not None:
+                    prices[key] = value
+            return prices
 
         # Redis SCAN approach
         pattern = f"price:{market}:*" if market else "price:*"
